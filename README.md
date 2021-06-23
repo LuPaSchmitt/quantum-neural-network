@@ -25,3 +25,7 @@ pip install strawberryfields
 pip install tensorflow
 
 pip install matplotlib
+
+qnn.py is able to learn functions, 
+operator.py learns a random unitary
+and 2d learns the multiplication of 2 quantum registers.
