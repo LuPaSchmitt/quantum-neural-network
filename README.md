@@ -3,7 +3,7 @@ Implementation of a quantum neural network for my Bachelor Thesis_
 
 In order to get this script to work, you need the following:
 
-Python 3.7
+Python 3.9
 
 Tensorflow
 
