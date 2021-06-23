@@ -178,8 +178,8 @@ start_time = time.time()
 
 opt= tf.keras.optimizers.Adam(learning_rate=lr)
 
-epochs=1000
-# Führe das Training 1000 mal durch
+epochs=500
+# Führe das Training 500 mal durch
 for i in range(epochs):
         
     # wenn das Programm gelaufen ist, dann resete die Engine
