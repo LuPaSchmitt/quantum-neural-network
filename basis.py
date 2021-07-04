@@ -11,6 +11,7 @@ die Darstellung im Fock-Raum, als Wignerfunktion im Phasenraum gegeben.
 Hier wird hauptsächlich Darstellung im Phasenraum (x,p) benutzt.
 
 Dieser Code orientiert sich an https://strawberryfields.ai/photonics/demos/run_quantum_neural_network.html#id9
+insbesondere die Funktion orth()
 """
 
 import numpy as np
@@ -127,8 +128,6 @@ def layer(params,q):
 """
     N: Dimension des Inputs (Anzahl der verwendeten Qumodes)
     l: Anzahl der Schichten des QNN
-    
-    
 """
 def init(N,l):
     std=0.1

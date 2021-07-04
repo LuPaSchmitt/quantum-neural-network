@@ -30,22 +30,24 @@ reg=1
 #Lernrate
 lr = 0.025
 
+#Anzahl der Epochen
+epochs=200
+
 #Dimension des zu lernenden Unitary
 dim_oper = 4
 
-#zu lernender Unitary
-
 #erzeugt eine zufällige 4x4 Matrix
-rand_unitary = random_interferometer(dim_oper)
-print(rand_unitary)
+unit_r = random_interferometer(dim_oper)
+print(unit_r)
 
 #fülle den Operator bis zum Cutoff mit der Identität auf
-ziel_unitary = np.identity(cutoff_dim, dtype=np.complex128)
-ziel_unitary[:dim_oper, :dim_oper] = rand_unitary
+unit_z = np.identity(cutoff_dim, dtype=np.complex128)
+unit_z[:dim_oper, :dim_oper] = unit_r
 
+#Spalten der Matrix
 zielkets = []
 for i in range(dim_oper):
-    zielkets.append(ziel_unitary[:,i])
+    zielkets.append(unit_z[:,i])
 zielkets = tf.constant(zielkets, dtype=tf.complex64)
 
 
@@ -71,11 +73,17 @@ qnn = sf.Program(in_dim)
 
 # initialisiere Parameter zufällig
 weights = basis.init(in_dim, layers) 
-num_params = np.prod(weights.shape)   # Gesamtzahl an Parametern
+anzahl = np.prod(weights.shape)   # Gesamtzahl an Parametern
     
-#Erstelle einen Array mit symbolischen Variabeln die später optimiert werden
-sf_params = np.arange(num_params).reshape(weights.shape).astype(np.str)
-sf_params = np.array([qnn.params(*i) for i in sf_params])
+#Erstelle einen Array mit symbolischen Variabeln die im QNN verwendet werden
+params = np.arange(anzahl).reshape(weights.shape)
+params = params.astype(np.str)   #Variablen sind einfach numeriert
+
+par = []
+for i in params:
+    par.append(qnn.params(*i))
+
+params = np.array(par)
 
 #symbolischer Parameter für den Input
 x_data = qnn.params("input")
@@ -94,7 +102,7 @@ with qnn.context as q:
     
     #baut Layer des QNN
     for l in range(layers):
-        basis.layer(sf_params[l], q)
+        basis.layer(params[l], q)
         
         
 #==============================================================
@@ -104,19 +112,21 @@ with qnn.context as q:
 def costfunc(weights):
     #Um Tensorflow benutzen zu können muss ein Dictionary zwischen den symbolischen
     #Variablen und den Tensorflowvariablen erstellt werden
-    mapping = {p.name: w for p, w in zip(sf_params.flatten(), tf.reshape(weights, [-1]))} 
+    dictio = {}
+    for symb, var in zip(params.flatten(), tf.reshape(weights, -1)):
+        dictio[symb.name] = var
 
     
     # benutze den Tensorflowsimulator
-    state = eng.run(qnn, args=mapping).state
+    state = eng.run(qnn, args=dictio).state
 
     #Ausgabe-Ket
     ket = state.ket()
    
-    #Mittlerer Überlappe
-    ueberlappe =  tf.math.real( tf.einsum('bi,bi->b', tf.math.conj(zielkets),ket) )
+    #Mittlerer Überlapp
+    ueberlapp =  tf.math.real( tf.einsum('bi,bi->b', tf.math.conj(zielkets),ket) )
 
-    loss = tf.abs(tf.reduce_sum(ueberlappe - 1))
+    loss = tf.abs(tf.reduce_sum(ueberlapp - 1))
 
     #Stelle sicher, dass der Trace des Outputs nahe bei 1 bleibt
     #Es wird also bestraft, wenn der Circuit Operationen benutzt
@@ -137,8 +147,8 @@ start_time = time.time()
 
 opt= tf.keras.optimizers.Adam(learning_rate=lr)
 
-epochs=200
-# Führe das Training 500 mal durch
+
+# Führe das Training 200 mal durch
 for i in range(epochs):
         
     # wenn das Programm gelaufen ist, dann resete die Engine
@@ -162,9 +172,6 @@ np.save("weights_unitary",weights)
 eng.reset()  
 
 # %matplotlib inline
-plt.rcParams['font.family'] = 'serif'
-plt.rcParams['font.sans-serif'] = ['Computer Modern Roman']
-plt.style.use('default')
 
 plt.plot(history)
 plt.ylabel('Kosten')
@@ -181,11 +188,12 @@ plt.show()
 weights=np.load("weights_unitary.npy")
 
 
-mapping = {p.name: w for p, w in zip(sf_params.flatten(), tf.reshape(weights, [-1]))} 
-
+dictio = {}
+for symb, var in zip(params.flatten(), tf.reshape(weights, -1)):
+    dictio[symb.name] = var
 
 # benutze den Tensorflowsimulator
-state = eng.run(qnn, args=mapping).state
+state = eng.run(qnn, args=dictio).state
 
 #Ausgabe-Ket
 ket = state.ket()
@@ -196,8 +204,8 @@ learnt_unitary = ket.numpy().T[:dim_oper, :dim_oper]
 #Stelle die beiden Operatoren grafisch dar
 #Real und Imaginärteil werden getrennt betrachtet
 fig, ax = plt.subplots(1, 4, figsize=(7, 4))
-ax[0].matshow(rand_unitary.real, cmap=plt.get_cmap('Blues'))
-ax[1].matshow(rand_unitary.imag, cmap=plt.get_cmap('Reds'))
+ax[0].matshow(unit_r.real, cmap=plt.get_cmap('Blues'))
+ax[1].matshow(unit_r.imag, cmap=plt.get_cmap('Reds'))
 ax[2].matshow(learnt_unitary.real, cmap=plt.get_cmap('Blues'))
 ax[3].matshow(learnt_unitary.imag, cmap=plt.get_cmap('Reds'))
 

@@ -30,6 +30,9 @@ batch = 50
 a = -1
 b = 1
 
+# Führe das Training 100 mal durch
+epochs=100
+
 #Bestrafung von nicht erwünschten Eigenschaften der Lösung
 reg = 1
 reg_err = 0.00
@@ -40,7 +43,7 @@ lr = 0.05
 #Funktionen die gelernt werden sollen
 
 #Rauschen (Normalverteilt)
-e=0.5
+e=0.1
 
 #1 dimensional
 def f1(x,e):
@@ -100,11 +103,18 @@ qnn = sf.Program(in_dim)
 
 # initialisiere Parameter zufällig
 weights = basis.init(in_dim, layers) 
-num_params = np.prod(weights.shape)   # Gesamtzahl an Parametern
-    
-#Erstelle einen Array mit symbolischen Variabeln die später optimiert werden
-sf_params = np.arange(num_params).reshape(weights.shape).astype(np.str)
-sf_params = np.array([qnn.params(*i) for i in sf_params])
+anzahl = np.prod(weights.shape)   # Gesamtzahl an Parametern
+ 
+   
+#Erstelle einen Array mit symbolischen Variabeln die im QNN verwendet werden
+params = np.arange(anzahl).reshape(weights.shape)
+params = params.astype(np.str)   #Variablen sind einfach numeriert
+
+par = []
+for i in params:
+    par.append(qnn.params(*i))
+
+params = np.array(par)
 
 #symbolischer Parameter für den Input
 x_data = qnn.params("input")
@@ -118,9 +128,9 @@ with qnn.context as q:
     for i in range(in_dim):
         ops.Dgate(x_data) | q[i]
     
-    
+    #Konstruiere Schichten des Circuits
     for l in range(layers):
-        basis.layer(sf_params[l], q)
+        basis.layer(params[l], q)
         
 
 #==============================================================
@@ -130,12 +140,15 @@ with qnn.context as q:
 def costfunc(weights):
     #Um Tensorflow benutzen zu können muss ein Dictionary zwischen den symbolischen
     #Variablen und den Tensorflowvariablen erstellt werden
-    mapping = {p.name: w for p, w in zip(sf_params.flatten(), tf.reshape(weights, [-1]))} 
-    mapping["input"] = train_data_x
+    dictio = {}
+    for symb, var in zip(params.flatten(), tf.reshape(weights, -1)):
+        dictio[symb.name] = var
+    
+    dictio["input"] = train_data_x
 
     
     # benutze den Tensorflowsimulator
-    state = eng.run(qnn, args=mapping).state
+    state = eng.run(qnn, args=dictio).state
 
     #Ortsprojektion und Varianz
     output, var = state.quad_expectation(0)
@@ -169,9 +182,6 @@ start_time = time.time()
 #Nutze einen Optimierer von Tensorflow. Genauer gesagt: Adam (arXiv:1412.6980v9)
 opt= tf.keras.optimizers.Adam(learning_rate=lr)
 
-# Führe das Training 100 mal durch
-epochs=100
-
 for i in range(epochs):
         
     # wenn das Programm gelaufen ist, dann resete die Engine
@@ -188,14 +198,10 @@ for i in range(epochs):
     
     # alle 10 Schritte 
     if i % 10 == 0:
-        print("Rep: {} Cost: {:.4f} Loss: {:.4f} Trace: {:.4f}".format(i, cost, loss, trace))  
+        print("Epochen: {} Gesamtkosten: {:.4f} Loss: {:.4f} Trace: {:.4f}".format(i, cost, loss, trace))  
         
         
         x = np.linspace(a, b, 200)
-        
-        # Passe den Plot an
-        rcParams['font.family'] = 'serif'
-        rcParams['font.sans-serif'] = ['Computer Modern Roman']
         
         fig, ax = plt.subplots(1,1)
         
@@ -228,10 +234,6 @@ print("Dauer: ",np.round(end_time-start_time),"Sekunden")
 np.save("weights",weights)
 eng.reset()
 
-# %matplotlib inline
-plt.rcParams['font.family'] = 'serif'
-plt.rcParams['font.sans-serif'] = ['Computer Modern Roman']
-plt.style.use('default')
 
 #Erstelle einen Plot des Trainingsverlaufes
 plt.plot(history)
@@ -242,26 +244,26 @@ plt.show()
 #==============================================================
 #                           Test
 #==============================================================
+
 #Lade die trainierten Parameter
 weights=np.load("weights.npy")
 
 # Führe das Programm mit nicht gelernten Test-Daten durch
-mapping = {p.name: w for p, w in zip(sf_params.flatten(), tf.reshape(weights, [-1]))} 
-mapping["input"] = test_data_x
+dictio = {}
+for symb, var in zip(params.flatten(), tf.reshape(weights, -1)):
+    dictio[symb.name] = var
+        
+dictio["input"] = test_data_x
 
 
 # benutze den Tensorflowsimulator
-state = eng.run(qnn, args=mapping).state
+state = eng.run(qnn, args=dictio).state
 
 #speichere Ortserwartungswert nach Ablauf des Programms
 output = state.quad_expectation(0)[0]
 
 
-x = np.linspace(a, b, 200)
-        
-# set plotting options
-rcParams['font.family'] = 'serif'
-rcParams['font.sans-serif'] = ['Computer Modern Roman']
+x = np.linspace(a, b, 200)       
 
 fig, ax = plt.subplots(1,1)
 
@@ -329,8 +331,8 @@ ax.scatter(test_data_x, predict, color='blue', marker='x', zorder=3, s=20)
 ax.set_xlabel('Input', fontsize=18)
 ax.set_ylabel('Output', fontsize=18)
 ax.tick_params(axis='both', which='minor', labelsize=16)
-name = ordner+"Test_klassisch.png"
-fig.savefig(name, format='png', bbox_inches='tight')
+name = ordner+"Test_klassisch.pdf"
+fig.savefig(name, format='pdf', bbox_inches='tight')
 
 
     

@@ -31,8 +31,11 @@ batch = 20
 a = -1
 b = 1
 
+#Trainingsepochen
+epochs=1000
+
 #Bestrafung von nicht erwünschten Eigenschaften der Lösung
-reg=1
+reg = 1
 #Lernrate
 lr = 0.03
 
@@ -42,18 +45,18 @@ lr = 0.03
 #Rauschen (Normalverteilt)
 e=0.0
 
-#1 dimensional
+#2 dimensional
 def f1(x,y,e):
     return x*y + e*np.random.normal(size=x.shape)
 
 def f2(x,y,e):
-    return np.abs(np.pi*x) + e*np.random.normal(size=x.shape)
+    return np.sin(x*y) + e*np.random.normal(size=x.shape)
 
 def f3(x,y,e):
-    return x**2-x+2 + e*np.random.normal(size=x.shape)
+    return np.sin(x)*np.sin(y) + e*np.random.normal(size=x.shape)
 
 def f4(x,y,e):
-    return np.exp(-x**2) + e*np.random.normal(size=x.shape)
+    return np.sin(x)+ np.sin(y) + e*np.random.normal(size=x.shape)
 
 
 #Bestimme welche Funktion gelernt werden soll
@@ -110,11 +113,18 @@ qnn = sf.Program(in_dim)
 
 # initialisiere Parameter zufällig
 weights = basis.init(in_dim, layers) 
-num_params = np.prod(weights.shape)   # Gesamtzahl an Parametern
+anzahl = np.prod(weights.shape)   # Gesamtzahl an Parametern
     
-#Erstelle einen Array mit symbolischen Variabeln die später optimiert werden
-sf_params = np.arange(num_params).reshape(weights.shape).astype(np.str)
-sf_params = np.array([qnn.params(*i) for i in sf_params])
+#Erstelle einen Array mit symbolischen Variabeln die im QNN verwendet werden
+params = np.arange(anzahl).reshape(weights.shape)
+params = params.astype(np.str)   #Variablen sind einfach numeriert
+
+
+par = []
+for i in params:
+    par.append(qnn.params(*i))
+
+params = np.array(par)
 
 #symbolischer Parameter für den Input
 x_data = qnn.params("input1")
@@ -130,7 +140,7 @@ with qnn.context as q:
     
     
     for l in range(layers):
-        basis.layer(sf_params[l], q)
+        basis.layer(params[l], q)
         
 
 #==============================================================
@@ -140,12 +150,14 @@ with qnn.context as q:
 def costfunc(weights):
     #Um Tensorflow benutzen zu können muss ein Dictionary zwischen den symbolischen
     #Variablen und den Tensorflowvariablen erstellt werden
-    mapping = {p.name: w for p, w in zip(sf_params.flatten(), tf.reshape(weights, [-1]))} 
-    mapping["input1"] = train_data_x
-    mapping["input2"] = train_data_y
+    dictio = {}
+    for symb, var in zip(params.flatten(), tf.reshape(weights, -1)):
+        dictio[symb.name] = var
+    dictio["input1"] = train_data_x
+    dictio["input2"] = train_data_y
     
     # benutze den Tensorflowsimulator
-    state = eng.run(qnn, args=mapping).state
+    state = eng.run(qnn, args=dictio).state
 
     #Ortsprojektion und Varianz
     output = state.quad_expectation(2)[0]
@@ -164,8 +176,9 @@ def costfunc(weights):
     return cost, loss, trace, output
 
 
-
-#Das Training dieses Netzes dauert mehrere Stunden!
+"""
+#Das Training dieses Netzes dauert mehrere Stunden! zum Testen daher
+#den Trainingsteil des Programmes auskommentieren (Gewichte werden aus Datei geladen)
 #==============================================================
 #                           Training
 #==============================================================
@@ -178,8 +191,8 @@ start_time = time.time()
 
 opt= tf.keras.optimizers.Adam(learning_rate=lr)
 
-epochs=500
-# Führe das Training 500 mal durch
+
+# Führe das Training 1000 mal durch
 for i in range(epochs):
         
     # wenn das Programm gelaufen ist, dann resete die Engine
@@ -196,7 +209,7 @@ for i in range(epochs):
     
     #alle 10 Schritte 
     if i % 10 == 0:
-        print("Rep: {} Cost: {:.4f} Loss: {:.4f} Trace: {:.4f}".format(i, cost, loss, trace))  
+        print("Epochen: {} Gesamtkosten: {:.4f} Loss: {:.4f} Trace: {:.4f}".format(i, cost, loss, trace)) 
         #Speichere grafisch den Trainingsfortschritt
         fig = plt.figure()
         ax = fig.add_subplot(111, projection="3d")
@@ -226,6 +239,7 @@ plt.ylabel('Kosten')
 plt.xlabel('Epoche')
 plt.show()
 
+"""
 #Teste den Algorithmus an nicht gelernten Trainingsdaten
 #==============================================================
 #                           Test
@@ -233,10 +247,10 @@ plt.show()
 
 weights=np.load("weights_mult.npy")
 
+
 """
 #Simuliere fehlerhafte Gates durch Veränderung einzelner Parameter
 from random import randint
-
 
 for fehler in range(1):
     print(fehler)
@@ -250,15 +264,17 @@ for fehler in range(1):
         cost, loss, trace, output = costfunc(weights)
         eng.reset()
         print(loss)
-
 """
-mapping = {p.name: w for p, w in zip(sf_params.flatten(), tf.reshape(weights, [-1]))} 
-mapping["input1"] = testX
-mapping["input2"] = testY
+
+dictio = {}
+for symb, var in zip(params.flatten(), tf.reshape(weights, -1)):
+    dictio[symb.name] = var
+dictio["input1"] = testX
+dictio["input2"] = testY
 
 
 # benutze den Tensorflowsimulator
-state = eng.run(qnn, args=mapping).state
+state = eng.run(qnn, args=dictio).state
 
 #Ortsprojektion der Ausgabe
 output = state.quad_expectation(2)[0]
@@ -267,15 +283,15 @@ output = state.quad_expectation(2)[0]
 #Visualisiere die Ausgabe für alle Testdaten
 fig = plt.figure()
 ax = fig.add_subplot(111, projection="3d")
-#ax.plot_surface(tX, tY, np.reshape(output,(batch,batch)), cmap="RdYlGn", lw=0.5, rstride=1, cstride=1,alpha=0.8)
-ax.plot_surface(X, Y, np.reshape(output,(batch,batch)), cmap="RdYlGn", lw=0.5, rstride=1, cstride=1,alpha=0.8)
+ax.plot_surface(tX, tY, np.reshape(output,(batch,batch)), cmap="RdYlGn", lw=0.5, rstride=1, cstride=1,alpha=0.8)
+#ax.plot_surface(X, Y, np.reshape(output,(batch,batch)), cmap="RdYlGn", lw=0.5, rstride=1, cstride=1,alpha=0.8)
 ax.plot_surface(X, Y, np.reshape(train_Z,(batch,batch)), cmap="Greys", lw=0.5, rstride=1, cstride=1,alpha=0.4)
 fig.set_size_inches(4.8, 5)
-name=ordner+"Test"+".png"
+name=ordner+"Test"+".pdf"
 ax.set_xlabel('x', fontsize=18)
 ax.set_ylabel('y', fontsize=18)
 ax.set_zlabel('z', fontsize=18)
-fig.savefig(name, format='png', bbox_inches='tight')
+fig.savefig(name, format='pdf', bbox_inches='tight')
 
 
 
